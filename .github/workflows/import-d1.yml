@@ -37,6 +37,7 @@ jobs:
             ).toString("utf8");
 
             const data = JSON.parse(raw);
+
             const items = Array.isArray(data)
               ? data
               : (data.items || []);
@@ -44,11 +45,17 @@ jobs:
             console.log("Catalog items:", items.length);
 
             if (!items.length) {
-              throw new Error("No catalog items found in data.json.gz");
+              throw new Error(
+                "No catalog items found in data.json.gz"
+              );
             }
 
             function sqlValue(v) {
-              if (v === undefined || v === null || v === "") {
+              if (
+                v === undefined ||
+                v === null ||
+                v === ""
+              ) {
                 return "NULL";
               }
 
@@ -108,7 +115,9 @@ jobs:
 
               if (!result.success) {
                 throw new Error(
-                  JSON.stringify(result.errors || result)
+                  JSON.stringify(
+                    result.errors || result
+                  )
                 );
               }
 
@@ -135,14 +144,16 @@ jobs:
               "links"
             ];
 
-            const CHUNK = 50;
+            // Small batch to avoid SQLITE_TOOBIG
+            const CHUNK = 5;
 
             for (
               let i = 0;
               i < items.length;
               i += CHUNK
             ) {
-              const batch = items.slice(i, i + CHUNK);
+              const batch =
+                items.slice(i, i + CHUNK);
 
               const values = batch.map(item => {
                 const row = [
@@ -163,7 +174,8 @@ jobs:
                   item.episodes ?? null,
                   item.detail_url ||
                     (
-                      item.kind && item.slug
+                      item.kind &&
+                      item.slug
                         ? `https://ctgmovies.com/${item.kind}/${item.slug}`
                         : null
                     ),
@@ -216,10 +228,21 @@ jobs:
             const count =
               check.result?.[0]?.results?.[0]?.count;
 
-            console.log("D1 total rows:", count);
-            console.log("IMPORT COMPLETE");
+            console.log(
+              "D1 total rows:",
+              count
+            );
+
+            console.log(
+              "IMPORT COMPLETE"
+            );
+
           })().catch(error => {
-            console.error("IMPORT FAILED:", error);
+            console.error(
+              "IMPORT FAILED:",
+              error
+            );
+
             process.exit(1);
           });
           NODE
