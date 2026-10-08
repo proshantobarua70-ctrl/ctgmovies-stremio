@@ -18,158 +18,208 @@ jobs:
           CF_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
         run: |
           node <<'NODE'
-          const fs = require("fs");
-          const zlib = require("zlib");
+          (async () => {
+            const fs = require("fs");
+            const zlib = require("zlib");
 
-          const token = process.env.CF_API_TOKEN;
-          const account = process.env.CF_ACCOUNT_ID;
-          const database = process.env.CF_DATABASE_ID;
+            const token = process.env.CF_API_TOKEN;
+            const account = process.env.CF_ACCOUNT_ID;
+            const database = process.env.CF_DATABASE_ID;
 
-          if (!token || !account || !database) {
-            throw new Error("Cloudflare secrets missing");
-          }
-
-          const raw = zlib.gunzipSync(
-            fs.readFileSync("data.json.gz")
-          ).toString("utf8");
-
-          const data = JSON.parse(raw);
-          const items = Array.isArray(data) ? data : (data.items || []);
-
-          console.log("Catalog items:", items.length);
-
-          function sqlValue(v) {
-            if (v === undefined || v === null || v === "") return "NULL";
-            if (typeof v === "number" && Number.isFinite(v)) return String(v);
-            if (typeof v === "boolean") return v ? "1" : "0";
-
-            return "'" + String(
-              typeof v === "object" ? JSON.stringify(v) : v
-            )
-              .replace(/\\/g, "\\\\")
-              .replace(/'/g, "''") + "'";
-          }
-
-          const endpoint =
-            `https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`;
-
-          async function query(sql) {
-            const r = await fetch(endpoint, {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${token}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ sql })
-            });
-
-            const text = await r.text();
-
-            if (!r.ok) {
-              throw new Error(`HTTP ${r.status}: ${text}`);
+            if (!token || !account || !database) {
+              throw new Error("Cloudflare secrets missing");
             }
 
-            const result = JSON.parse(text);
+            console.log("Reading data.json.gz...");
 
-            if (!result.success) {
-              throw new Error(JSON.stringify(result.errors || result));
+            const raw = zlib.gunzipSync(
+              fs.readFileSync("data.json.gz")
+            ).toString("utf8");
+
+            const data = JSON.parse(raw);
+            const items = Array.isArray(data)
+              ? data
+              : (data.items || []);
+
+            console.log("Catalog items:", items.length);
+
+            if (!items.length) {
+              throw new Error("No catalog items found in data.json.gz");
             }
 
-            return result;
-          }
+            function sqlValue(v) {
+              if (v === undefined || v === null || v === "") {
+                return "NULL";
+              }
 
-          const columns = [
-            "id",
-            "kind",
-            "slug",
-            "name",
-            "poster",
-            "backdrop",
-            "year",
-            "overview",
-            "rating",
-            "genres",
-            "runtime",
-            "imdb",
-            "tmdb",
-            "trailer",
-            "episodes",
-            "detail_url",
-            "links"
-          ];
+              if (
+                typeof v === "number" &&
+                Number.isFinite(v)
+              ) {
+                return String(v);
+              }
 
-          const CHUNK = 50;
+              if (typeof v === "boolean") {
+                return v ? "1" : "0";
+              }
 
-          for (let i = 0; i < items.length; i += CHUNK) {
-            const batch = items.slice(i, i + CHUNK);
+              const value =
+                typeof v === "object"
+                  ? JSON.stringify(v)
+                  : String(v);
 
-            const values = batch.map(item => {
-              const row = [
-                item.id || null,
-                item.kind || null,
-                item.slug || null,
-                item.name || null,
-                item.poster || null,
-                item.backdrop || null,
-                item.year ?? null,
-                item.overview || null,
-                item.rating ?? null,
-                item.genres ?? null,
-                item.runtime ?? null,
-                item.imdb || null,
-                item.tmdb || null,
-                item.trailer || null,
-                item.episodes ?? null,
-                item.detail_url || (
-                  item.kind && item.slug
-                    ? `https://ctgmovies.com/${item.kind}/${item.slug}`
-                    : null
-                ),
-                item.links ?? null
-              ];
+              return "'" +
+                value
+                  .replace(/\\/g, "\\\\")
+                  .replace(/'/g, "''") +
+                "'";
+            }
 
-              return "(" + row.map(sqlValue).join(",") + ")";
-            }).join(",");
+            const endpoint =
+              `https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`;
 
-            const sql = `
-              INSERT INTO movies
-              (${columns.join(",")})
-              VALUES ${values}
-              ON CONFLICT(id) DO UPDATE SET
-                kind=excluded.kind,
-                slug=excluded.slug,
-                name=excluded.name,
-                poster=excluded.poster,
-                backdrop=excluded.backdrop,
-                year=excluded.year,
-                overview=excluded.overview,
-                rating=excluded.rating,
-                genres=excluded.genres,
-                runtime=excluded.runtime,
-                imdb=excluded.imdb,
-                tmdb=excluded.tmdb,
-                trailer=excluded.trailer,
-                episodes=excluded.episodes,
-                detail_url=excluded.detail_url,
-                links=excluded.links,
-                updated_at=CURRENT_TIMESTAMP
-            `;
+            async function query(sql) {
+              const response = await fetch(endpoint, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${token}`,
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ sql })
+              });
 
-            await query(sql);
+              const text = await response.text();
 
-            console.log(
-              `Imported ${Math.min(i + CHUNK, items.length)} / ${items.length}`
+              if (!response.ok) {
+                throw new Error(
+                  `Cloudflare API HTTP ${response.status}: ${text}`
+                );
+              }
+
+              let result;
+
+              try {
+                result = JSON.parse(text);
+              } catch {
+                throw new Error(
+                  `Invalid Cloudflare API response: ${text}`
+                );
+              }
+
+              if (!result.success) {
+                throw new Error(
+                  JSON.stringify(result.errors || result)
+                );
+              }
+
+              return result;
+            }
+
+            const columns = [
+              "id",
+              "kind",
+              "slug",
+              "name",
+              "poster",
+              "backdrop",
+              "year",
+              "overview",
+              "rating",
+              "genres",
+              "runtime",
+              "imdb",
+              "tmdb",
+              "trailer",
+              "episodes",
+              "detail_url",
+              "links"
+            ];
+
+            const CHUNK = 50;
+
+            for (
+              let i = 0;
+              i < items.length;
+              i += CHUNK
+            ) {
+              const batch = items.slice(i, i + CHUNK);
+
+              const values = batch.map(item => {
+                const row = [
+                  item.id || null,
+                  item.kind || null,
+                  item.slug || null,
+                  item.name || null,
+                  item.poster || null,
+                  item.backdrop || null,
+                  item.year ?? null,
+                  item.overview || null,
+                  item.rating ?? null,
+                  item.genres ?? null,
+                  item.runtime ?? null,
+                  item.imdb || null,
+                  item.tmdb || null,
+                  item.trailer || null,
+                  item.episodes ?? null,
+                  item.detail_url ||
+                    (
+                      item.kind && item.slug
+                        ? `https://ctgmovies.com/${item.kind}/${item.slug}`
+                        : null
+                    ),
+                  item.links ?? null
+                ];
+
+                return "(" +
+                  row.map(sqlValue).join(",") +
+                  ")";
+              }).join(",");
+
+              const sql = `
+                INSERT INTO movies
+                (${columns.join(",")})
+                VALUES ${values}
+                ON CONFLICT(id) DO UPDATE SET
+                  kind=excluded.kind,
+                  slug=excluded.slug,
+                  name=excluded.name,
+                  poster=excluded.poster,
+                  backdrop=excluded.backdrop,
+                  year=excluded.year,
+                  overview=excluded.overview,
+                  rating=excluded.rating,
+                  genres=excluded.genres,
+                  runtime=excluded.runtime,
+                  imdb=excluded.imdb,
+                  tmdb=excluded.tmdb,
+                  trailer=excluded.trailer,
+                  episodes=excluded.episodes,
+                  detail_url=excluded.detail_url,
+                  links=excluded.links,
+                  updated_at=CURRENT_TIMESTAMP
+              `;
+
+              await query(sql);
+
+              console.log(
+                `Imported ${Math.min(
+                  i + CHUNK,
+                  items.length
+                )} / ${items.length}`
+              );
+            }
+
+            const check = await query(
+              "SELECT COUNT(*) AS count FROM movies"
             );
-          }
 
-          const check = await query(
-            "SELECT COUNT(*) AS count FROM movies"
-          );
+            const count =
+              check.result?.[0]?.results?.[0]?.count;
 
-          console.log(
-            "D1 total rows:",
-            check.result?.[0]?.results?.[0]?.count
-          );
-
-          console.log("IMPORT COMPLETE");
+            console.log("D1 total rows:", count);
+            console.log("IMPORT COMPLETE");
+          })().catch(error => {
+            console.error("IMPORT FAILED:", error);
+            process.exit(1);
+          });
           NODE
