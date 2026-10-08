@@ -45,52 +45,25 @@ jobs:
             console.log("Catalog items:", items.length);
 
             if (!items.length) {
-              throw new Error("No catalog items found");
-            }
-
-            function sqlValue(v) {
-              if (
-                v === undefined ||
-                v === null ||
-                v === ""
-              ) {
-                return "NULL";
-              }
-
-              if (
-                typeof v === "number" &&
-                Number.isFinite(v)
-              ) {
-                return String(v);
-              }
-
-              if (typeof v === "boolean") {
-                return v ? "1" : "0";
-              }
-
-              const value =
-                typeof v === "object"
-                  ? JSON.stringify(v)
-                  : String(v);
-
-              return "'" +
-                value
-                  .replace(/\\/g, "\\\\")
-                  .replace(/'/g, "''") +
-                "'";
+              throw new Error(
+                "No catalog items found in data.json.gz"
+              );
             }
 
             const endpoint =
               `https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`;
 
-            async function query(sql) {
+            async function query(sql, params = []) {
               const response = await fetch(endpoint, {
                 method: "POST",
                 headers: {
                   "Authorization": `Bearer ${token}`,
                   "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ sql })
+                body: JSON.stringify({
+                  sql,
+                  params
+                })
               });
 
               const text = await response.text();
@@ -101,7 +74,15 @@ jobs:
                 );
               }
 
-              const result = JSON.parse(text);
+              let result;
+
+              try {
+                result = JSON.parse(text);
+              } catch {
+                throw new Error(
+                  `Invalid Cloudflare API response: ${text}`
+                );
+              }
 
               if (!result.success) {
                 throw new Error(
@@ -112,81 +93,99 @@ jobs:
               return result;
             }
 
+            function value(v) {
+              if (
+                v === undefined ||
+                v === null ||
+                v === ""
+              ) {
+                return null;
+              }
+
+              if (typeof v === "object") {
+                return JSON.stringify(v);
+              }
+
+              return v;
+            }
+
+            const sql = `
+              INSERT INTO movies (
+                id,
+                kind,
+                slug,
+                name,
+                poster,
+                backdrop,
+                year,
+                overview,
+                rating,
+                genres,
+                runtime,
+                imdb,
+                tmdb,
+                trailer,
+                episodes,
+                detail_url,
+                links
+              )
+              VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?
+              )
+              ON CONFLICT(id) DO UPDATE SET
+                kind = excluded.kind,
+                slug = excluded.slug,
+                name = excluded.name,
+                poster = excluded.poster,
+                backdrop = excluded.backdrop,
+                year = excluded.year,
+                overview = excluded.overview,
+                rating = excluded.rating,
+                genres = excluded.genres,
+                runtime = excluded.runtime,
+                imdb = excluded.imdb,
+                tmdb = excluded.tmdb,
+                trailer = excluded.trailer,
+                episodes = excluded.episodes,
+                detail_url = excluded.detail_url,
+                links = excluded.links,
+                updated_at = CURRENT_TIMESTAMP
+            `;
+
             let imported = 0;
 
             for (const item of items) {
-
-              const row = [
-                item.id || null,
-                item.kind || null,
-                item.slug || null,
-                item.name || null,
-                item.poster || null,
-                item.backdrop || null,
-                item.year ?? null,
-                item.overview || null,
-                item.rating ?? null,
-                item.genres ?? null,
-                item.runtime ?? null,
-                item.imdb || null,
-                item.tmdb || null,
-                item.trailer || null,
-                item.episodes ?? null,
-                item.detail_url ||
+              const params = [
+                value(item.id),
+                value(item.kind),
+                value(item.slug),
+                value(item.name),
+                value(item.poster),
+                value(item.backdrop),
+                value(item.year),
+                value(item.overview),
+                value(item.rating),
+                value(item.genres),
+                value(item.runtime),
+                value(item.imdb),
+                value(item.tmdb),
+                value(item.trailer),
+                value(item.episodes),
+                value(
+                  item.detail_url ||
                   (
                     item.kind && item.slug
                       ? `https://ctgmovies.com/${item.kind}/${item.slug}`
                       : null
-                  ),
-                item.links ?? null
+                  )
+                ),
+                value(item.links)
               ];
 
-              const sql = `
-                INSERT INTO movies
-                (
-                  id,
-                  kind,
-                  slug,
-                  name,
-                  poster,
-                  backdrop,
-                  year,
-                  overview,
-                  rating,
-                  genres,
-                  runtime,
-                  imdb,
-                  tmdb,
-                  trailer,
-                  episodes,
-                  detail_url,
-                  links
-                )
-                VALUES (
-                  ${row.map(sqlValue).join(",")}
-                )
-                ON CONFLICT(id) DO UPDATE SET
-                  kind=excluded.kind,
-                  slug=excluded.slug,
-                  name=excluded.name,
-                  poster=excluded.poster,
-                  backdrop=excluded.backdrop,
-                  year=excluded.year,
-                  overview=excluded.overview,
-                  rating=excluded.rating,
-                  genres=excluded.genres,
-                  runtime=excluded.runtime,
-                  imdb=excluded.imdb,
-                  tmdb=excluded.tmdb,
-                  trailer=excluded.trailer,
-                  episodes=excluded.episodes,
-                  detail_url=excluded.detail_url,
-                  links=excluded.links,
-                  updated_at=CURRENT_TIMESTAMP
-              `;
-
               try {
-                await query(sql);
+                await query(sql, params);
+
                 imported++;
 
                 if (
