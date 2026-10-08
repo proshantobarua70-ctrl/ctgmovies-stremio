@@ -1,4 +1,4 @@
-name: Import old catalog to D1
+]name: Import old catalog to D1
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Import data.json.gz to Cloudflare D1
+      - name: Batch import data.json.gz to Cloudflare D1
         env:
           CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -45,15 +45,13 @@ jobs:
             console.log("Catalog items:", items.length);
 
             if (!items.length) {
-              throw new Error(
-                "No catalog items found in data.json.gz"
-              );
+              throw new Error("No catalog items found");
             }
 
             const endpoint =
               `https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`;
 
-            async function query(sql, params = []) {
+            async function batchQuery(batch) {
               const response = await fetch(endpoint, {
                 method: "POST",
                 headers: {
@@ -61,8 +59,7 @@ jobs:
                   "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                  sql,
-                  params
+                  batch
                 })
               });
 
@@ -70,19 +67,11 @@ jobs:
 
               if (!response.ok) {
                 throw new Error(
-                  `Cloudflare API HTTP ${response.status}: ${text}`
+                  `Cloudflare HTTP ${response.status}: ${text}`
                 );
               }
 
-              let result;
-
-              try {
-                result = JSON.parse(text);
-              } catch {
-                throw new Error(
-                  `Invalid Cloudflare API response: ${text}`
-                );
-              }
+              const result = JSON.parse(text);
 
               if (!result.success) {
                 throw new Error(
@@ -153,65 +142,73 @@ jobs:
                 updated_at = CURRENT_TIMESTAMP
             `;
 
+            const BATCH_SIZE = 50;
             let imported = 0;
 
-            for (const item of items) {
-              const params = [
-                value(item.id),
-                value(item.kind),
-                value(item.slug),
-                value(item.name),
-                value(item.poster),
-                value(item.backdrop),
-                value(item.year),
-                value(item.overview),
-                value(item.rating),
-                value(item.genres),
-                value(item.runtime),
-                value(item.imdb),
-                value(item.tmdb),
-                value(item.trailer),
-                value(item.episodes),
-                value(
-                  item.detail_url ||
-                  (
-                    item.kind && item.slug
-                      ? `https://ctgmovies.com/${item.kind}/${item.slug}`
-                      : null
-                  )
-                ),
-                value(item.links)
-              ];
+            for (
+              let start = 0;
+              start < items.length;
+              start += BATCH_SIZE
+            ) {
+              const chunk = items.slice(
+                start,
+                start + BATCH_SIZE
+              );
+
+              const batch = chunk.map(item => ({
+                sql,
+                params: [
+                  value(item.id),
+                  value(item.kind),
+                  value(item.slug),
+                  value(item.name),
+                  value(item.poster),
+                  value(item.backdrop),
+                  value(item.year),
+                  value(item.overview),
+                  value(item.rating),
+                  value(item.genres),
+                  value(item.runtime),
+                  value(item.imdb),
+                  value(item.tmdb),
+                  value(item.trailer),
+                  value(item.episodes),
+                  value(
+                    item.detail_url ||
+                    (
+                      item.kind && item.slug
+                        ? `https://ctgmovies.com/${item.kind}/${item.slug}`
+                        : null
+                    )
+                  ),
+                  value(item.links)
+                ]
+              }));
 
               try {
-                await query(sql, params);
+                await batchQuery(batch);
 
-                imported++;
+                imported += chunk.length;
 
-                if (
-                  imported % 25 === 0 ||
-                  imported === items.length
-                ) {
-                  console.log(
-                    `Imported ${imported} / ${items.length}`
-                  );
-                }
+                console.log(
+                  `Imported ${imported} / ${items.length}`
+                );
 
               } catch (error) {
                 console.error(
-                  `FAILED ITEM ${imported + 1}:`,
-                  item.name || item.id
+                  `FAILED BATCH starting at item ${start + 1}`
                 );
-
                 console.error(error.message);
-
                 throw error;
               }
             }
 
-            const check = await query(
-              "SELECT COUNT(*) AS count FROM movies"
-            );
+            const check = await batchQuery([
+              {
+                sql: "SELECT COUNT(*) AS count FROM movies",
+                params: []
+              }
+            ]);
 
             const count =
               check.result?.[0]?.results?.[0]?.count;
