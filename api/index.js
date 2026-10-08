@@ -3,6 +3,10 @@ const WORKER =
 
 const ADDON_ID = "com.mhthe1.ctgmovies.bridge";
 
+/* =========================
+   HELPERS
+========================= */
+
 function cleanId(value) {
   return decodeURIComponent(String(value || ""))
     .replace(/\.json$/i, "")
@@ -21,7 +25,7 @@ function sendJson(res, status, data) {
 async function workerFetch(path) {
   const response = await fetch(`${WORKER}${path}`, {
     headers: {
-      "User-Agent": "CTGMovies-Stremio-Bridge/4.0"
+      "User-Agent": "CTGMovies-Stremio-Bridge/5.0"
     }
   });
 
@@ -48,204 +52,17 @@ async function workerFetch(path) {
   return data;
 }
 
-/*
-  Stremio can request stream IDs in different forms.
-
-  Examples:
-
-  /stream/series/ctg:tv:east-of-eden:1:1.json
-
-  /stream/series/ctg:tv:east-of-eden/1/1.json
-
-  /stream/series/ctg:tv:east-of-eden.json?season=1&episode=1
-
-  /stream/series/ctg:tv:east-of-eden:1:1.json
-*/
-
-function parseStreamRequest(pathname, url) {
-  const parts = pathname
-    .split("/")
-    .filter(Boolean);
-
-  let type = "";
-  let rawId = "";
-  let season = null;
-  let episode = null;
-
-  const streamIndex = parts.indexOf("stream");
-
-  if (streamIndex === -1) {
-    return {
-      type,
-      id: "",
-      season,
-      episode
-    };
-  }
-
-  type = parts[streamIndex + 1] || "";
-
-  const remaining = parts.slice(streamIndex + 2);
-
-  if (remaining.length === 0) {
-    rawId = "";
-  } else {
-    rawId = cleanId(remaining[0]);
-
-    /*
-      Format:
-      /stream/series/ID/1/1.json
-    */
-
-    if (remaining.length >= 3) {
-      const s = cleanId(remaining[remaining.length - 2]);
-      const e = cleanId(remaining[remaining.length - 1]);
-
-      if (/^\d+$/.test(s) && /^\d+$/.test(e)) {
-        season = Number(s);
-        episode = Number(e);
-
-        rawId = cleanId(
-          remaining[remaining.length - 3]
-        );
-      }
-    }
-
-    /*
-      Format:
-      ID:1:1
-    */
-
-    const colon = rawId.split(":");
-
-    if (
-      colon.length >= 5 &&
-      colon[0] === "ctg" &&
-      /^\d+$/.test(colon[colon.length - 2]) &&
-      /^\d+$/.test(colon[colon.length - 1])
-    ) {
-      season = Number(
-        colon[colon.length - 2]
-      );
-
-      episode = Number(
-        colon[colon.length - 1]
-      );
-
-      rawId = colon
-        .slice(0, -2)
-        .join(":");
-    }
-  }
-
-  /*
-    Query parameters always override
-    path-derived values.
-  */
-
-  const queryId = url.searchParams.get("id");
-
-  if (queryId) {
-    rawId = cleanId(queryId);
-  }
-
-  const querySeason =
-    url.searchParams.get("season");
-
-  const queryEpisode =
-    url.searchParams.get("episode");
-
-  if (
-    querySeason !== null &&
-    /^\d+$/.test(querySeason)
-  ) {
-    season = Number(querySeason);
-  }
-
-  if (
-    queryEpisode !== null &&
-    /^\d+$/.test(queryEpisode)
-  ) {
-    episode = Number(queryEpisode);
-  }
-
-  /*
-    Some Stremio clients use:
-    ?season=1&episode=1
-    with ID in path.
-  */
-
-  return {
-    type,
-    id: rawId,
-    season,
-    episode
-  };
-}
-
-function makeStreams(links) {
-  if (!Array.isArray(links)) {
-    return [];
-  }
-
-  return links
-    .filter(
-      link =>
-        link &&
-        typeof link.url === "string" &&
-        link.url.length > 0
-    )
-    .map(link => {
-      const subtitles = Array.isArray(
-        link.subs
-      )
-        ? link.subs
-            .filter(
-              sub =>
-                sub &&
-                typeof sub.url === "string" &&
-                sub.url.length > 0
-            )
-            .map(sub => ({
-              url: sub.url,
-              lang:
-                sub.label ||
-                "Unknown",
-              label:
-                sub.label ||
-                "Subtitle"
-            }))
-        : [];
-
-      return {
-        name: "CTGMovies",
-        title:
-          `${link.quality || "Direct"}`
-          +
-          (
-            link.source
-              ? ` • ${link.source}`
-              : ""
-          ),
-        url: link.url,
-
-        ...(subtitles.length
-          ? { subtitles }
-          : {}),
-
-        behaviorHints: {
-          bingeGroup:
-            "ctgmovies"
-        }
-      };
-    });
-}
+/* =========================
+   MANIFEST
+========================= */
 
 function makeManifest() {
   return {
     id: ADDON_ID,
-    version: "4.0.0",
+    version: "5.0.0",
+
     name: "CTGMovies Bridge",
+
     description:
       "CTGMovies Movies, TV Shows and Anime with direct streams.",
 
@@ -291,6 +108,7 @@ function makeManifest() {
         type: "movie",
         id: "ctg_movies",
         name: "CTGMovies Movies",
+
         extra: [
           {
             name: "search",
@@ -307,6 +125,7 @@ function makeManifest() {
         type: "series",
         id: "ctg_tv",
         name: "CTGMovies TV Shows",
+
         extra: [
           {
             name: "search",
@@ -323,6 +142,7 @@ function makeManifest() {
         type: "series",
         id: "ctg_anime",
         name: "CTGMovies Anime",
+
         extra: [
           {
             name: "search",
@@ -343,26 +163,34 @@ function makeManifest() {
   };
 }
 
+/* =========================
+   META
+========================= */
+
 function convertMeta(data, type, id) {
+  const actualId =
+    data.id || id;
+
+  const actualType =
+    type ||
+    (
+      String(actualId).includes(":tv:") ||
+      String(actualId).includes(":anime:")
+        ? "series"
+        : "movie"
+    );
+
   const meta = {
-    id: data.id || id,
-
-    type:
-      type ||
-      (
-        String(id).includes(":tv:") ||
-        String(id).includes(":anime:")
-          ? "series"
-          : "movie"
-      ),
-
+    id: actualId,
+    type: actualType,
     name:
       data.name ||
       "CTGMovies"
   };
 
   if (data.poster) {
-    meta.poster = data.poster;
+    meta.poster =
+      data.poster;
   }
 
   if (data.backdrop) {
@@ -395,409 +223,823 @@ function convertMeta(data, type, id) {
       data.imdb;
   }
 
+  /*
+    IMPORTANT:
+    Series/Anime episodes
+    become Stremio videos.
+  */
+
+  if (
+    actualType === "series" &&
+    Array.isArray(data.episodes)
+  ) {
+    meta.videos =
+      data.episodes
+        .filter(ep =>
+          ep &&
+          Number.isFinite(
+            Number(ep.s)
+          ) &&
+          Number.isFinite(
+            Number(ep.e)
+          )
+        )
+        .map(ep => {
+          const video = {
+            id:
+              `${actualId}:${Number(ep.s)}:${Number(ep.e)}`,
+
+            title:
+              ep.name ||
+              `Episode ${Number(ep.e)}`,
+
+            season:
+              Number(ep.s),
+
+            episode:
+              Number(ep.e)
+          };
+
+          if (ep.overview) {
+            video.overview =
+              ep.overview;
+          }
+
+          if (ep.still) {
+            video.thumbnail =
+              ep.still;
+          }
+
+          if (ep.air) {
+            video.released =
+              `${ep.air}T00:00:00.000Z`;
+          }
+
+          return video;
+        });
+  }
+
   return {
     meta
   };
 }
 
-module.exports = async function handler(
-  req,
+/* =========================
+   CATALOG
+========================= */
+
+async function handleCatalog(
+  path,
+  url,
   res
 ) {
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    "*"
-  );
+  const parts =
+    path
+      .split("/")
+      .filter(Boolean);
 
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "*"
-  );
+  const type =
+    parts[1] ||
+    "movie";
 
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,OPTIONS"
-  );
-
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  try {
-    const url = new URL(
-      req.url,
-      `https://${req.headers.host}`
+  const catalog =
+    cleanId(
+      parts[2] || ""
     );
 
-    const path =
-      url.pathname;
+  const skip =
+    Number(
+      url.searchParams.get(
+        "skip"
+      ) || "0"
+    );
 
-    /*
-      PING
-    */
+  const search =
+    url.searchParams.get(
+      "search"
+    ) || "";
 
-    if (path === "/ping") {
-      return sendJson(res, 200, {
-        ok: true,
-        service:
-          "CTGMovies Vercel Bridge",
-        version: "4.0.0",
-        worker: WORKER
-      });
-    }
+  let target =
+    `/movies?type=${encodeURIComponent(type)}` +
+    `&catalog=${encodeURIComponent(catalog)}` +
+    `&skip=${encodeURIComponent(skip)}`;
 
-    /*
-      MANIFEST
-    */
+  if (search) {
+    target +=
+      `&search=${encodeURIComponent(search)}`;
+  }
 
-    if (path === "/manifest.json") {
-      return sendJson(
-        res,
-        200,
-        makeManifest()
-      );
-    }
+  const data =
+    await workerFetch(target);
 
-    /*
-      CATALOG
-    */
+  /*
+    Worker already returned
+    Stremio metas.
+  */
 
-    if (
-      path.includes("/catalog/")
-    ) {
-      const parts =
-        path
-          .split("/")
-          .filter(Boolean);
-
-      const type =
-        parts[1] || "movie";
-
-      const catalog =
-        cleanId(parts[2] || "");
-
-      const skip =
-        Number(
-          url.searchParams.get(
-            "skip"
-          ) || "0"
-        );
-
-      const search =
-        url.searchParams.get(
-          "search"
-        ) || "";
-
-      let target =
-        `/movies?type=${encodeURIComponent(type)}` +
-        `&catalog=${encodeURIComponent(catalog)}` +
-        `&skip=${encodeURIComponent(skip)}`;
-
-      if (search) {
-        target +=
-          `&search=${encodeURIComponent(search)}`;
-      }
-
-      const data =
-        await workerFetch(target);
-
-      if (
-        Array.isArray(
+  if (
+    Array.isArray(
+      data.metas
+    )
+  ) {
+    return sendJson(
+      res,
+      200,
+      {
+        metas:
           data.metas
-        )
-      ) {
-        return sendJson(
-          res,
-          200,
-          {
-            metas:
-              data.metas
-          }
-        );
-      }
-
-      if (
-        Array.isArray(
-          data.items
-        )
-      ) {
-        const metas =
-          data.items.map(item => ({
-            id: item.id,
-
-            type:
-              item.kind === "movie"
-                ? "movie"
-                : "series",
-
-            name:
-              item.name,
-
-            poster:
-              item.poster,
-
-            background:
-              item.backdrop,
-
-            description:
-              item.overview,
-
-            releaseInfo:
-              item.year
-                ? String(item.year)
-                : undefined
-          }));
-
-        return sendJson(
-          res,
-          200,
-          {
-            metas
-          }
-        );
-      }
-
-      return sendJson(
-        res,
-        200,
-        {
-          metas: []
-        }
-      );
-    }
-
-    /*
-      META
-    */
-
-    if (
-      path.includes("/meta/")
-    ) {
-      const parts =
-        path
-          .split("/")
-          .filter(Boolean);
-
-      const id =
-        cleanId(
-          parts[parts.length - 1]
-        );
-
-      const type =
-        id.includes(":tv:") ||
-        id.includes(":anime:")
-          ? "series"
-          : "movie";
-
-      const data =
-        await workerFetch(
-          `/meta?id=${encodeURIComponent(id)}`
-        );
-
-      return sendJson(
-        res,
-        200,
-        convertMeta(
-          data,
-          type,
-          id
-        )
-      );
-    }
-
-    /*
-      STREAM
-    */
-
-    if (
-      path === "/stream" ||
-      path.includes("/stream/")
-    ) {
-      const request =
-        parseStreamRequest(
-          path,
-          url
-        );
-
-      if (!request.id) {
-        return sendJson(
-          res,
-          200,
-          {
-            streams: []
-          }
-        );
-      }
-
-      const data =
-        await workerFetch(
-          `/stream?id=${encodeURIComponent(
-            request.id
-          )}`
-        );
-
-      let links = [];
-
-      /*
-        MOVIE
-      */
-
-      if (
-        request.type === "movie" ||
-        !Array.isArray(
-          data.episodes
-        )
-      ) {
-        if (
-          Array.isArray(
-            data.links
-          )
-        ) {
-          links =
-            data.links;
-        }
-      }
-
-      /*
-        SERIES / ANIME
-      */
-
-      else {
-        let selected =
-          null;
-
-        /*
-          Exact S/E match
-        */
-
-        if (
-          request.season !== null &&
-          request.episode !== null
-        ) {
-          selected =
-            data.episodes.find(
-              ep =>
-                Number(ep.s) ===
-                  Number(
-                    request.season
-                  ) &&
-                Number(ep.e) ===
-                  Number(
-                    request.episode
-                  )
-            );
-        }
-
-        /*
-          If Stremio sends only
-          an episode number,
-          try matching episode.
-        */
-
-        if (
-          !selected &&
-          request.episode !== null
-        ) {
-          selected =
-            data.episodes.find(
-              ep =>
-                Number(ep.e) ===
-                Number(
-                  request.episode
-                )
-            );
-        }
-
-        if (
-          selected &&
-          Array.isArray(
-            selected.links
-          )
-        ) {
-          links =
-            selected.links;
-        }
-      }
-
-      return sendJson(
-        res,
-        200,
-        {
-          streams:
-            makeStreams(links)
-        }
-      );
-    }
-
-    /*
-      DIRECT API
-    */
-
-    if (path === "/movies") {
-      const data =
-        await workerFetch(
-          `/movies${url.search}`
-        );
-
-      return sendJson(
-        res,
-        200,
-        data
-      );
-    }
-
-    if (path === "/search") {
-      const data =
-        await workerFetch(
-          `/search${url.search}`
-        );
-
-      return sendJson(
-        res,
-        200,
-        data
-      );
-    }
-
-    if (path === "/meta") {
-      const id =
-        url.searchParams.get(
-          "id"
-        ) || "";
-
-      const data =
-        await workerFetch(
-          `/meta?id=${encodeURIComponent(id)}`
-        );
-
-      return sendJson(
-        res,
-        200,
-        data
-      );
-    }
-
-    return sendJson(
-      res,
-      404,
-      {
-        error: "Not found"
-      }
-    );
-
-  } catch (error) {
-    console.error(error);
-
-    return sendJson(
-      res,
-      500,
-      {
-        streams: [],
-        error:
-          "Vercel bridge error",
-        message:
-          error.message
       }
     );
   }
-};
+
+  /*
+    Fallback for Worker items.
+  */
+
+  if (
+    Array.isArray(
+      data.items
+    )
+  ) {
+    const metas =
+      data.items.map(item => ({
+        id:
+          item.id,
+
+        type:
+          item.kind === "movie"
+            ? "movie"
+            : "series",
+
+        name:
+          item.name,
+
+        poster:
+          item.poster,
+
+        background:
+          item.backdrop,
+
+        description:
+          item.overview,
+
+        releaseInfo:
+          item.year
+            ? String(item.year)
+            : undefined
+      }));
+
+    return sendJson(
+      res,
+      200,
+      {
+        metas
+      }
+    );
+  }
+
+  return sendJson(
+    res,
+    200,
+    {
+      metas: []
+    }
+  );
+}
+
+/* =========================
+   STREAM ID PARSER
+========================= */
+
+function parseStreamRequest(
+  pathname,
+  url
+) {
+  const parts =
+    pathname
+      .split("/")
+      .filter(Boolean);
+
+  let type = "";
+  let id = "";
+  let season = null;
+  let episode = null;
+
+  const streamIndex =
+    parts.indexOf(
+      "stream"
+    );
+
+  if (
+    streamIndex === -1
+  ) {
+    return {
+      type,
+      id,
+      season,
+      episode
+    };
+  }
+
+  type =
+    parts[
+      streamIndex + 1
+    ] || "";
+
+  const remaining =
+    parts.slice(
+      streamIndex + 2
+    );
+
+  if (
+    remaining.length > 0
+  ) {
+    /*
+      Standard:
+      /stream/series/ID.json
+    */
+
+    id =
+      cleanId(
+        remaining[0]
+      );
+
+    /*
+      Path:
+      /stream/series/ID/1/1.json
+    */
+
+    if (
+      remaining.length >= 3
+    ) {
+      const s =
+        cleanId(
+          remaining[
+            remaining.length - 2
+          ]
+        );
+
+      const e =
+        cleanId(
+          remaining[
+            remaining.length - 1
+          ]
+        );
+
+      if (
+        /^\d+$/.test(s) &&
+        /^\d+$/.test(e)
+      ) {
+        season =
+          Number(s);
+
+        episode =
+          Number(e);
+
+        id =
+          cleanId(
+            remaining[
+              remaining.length - 3
+            ]
+          );
+      }
+    }
+
+    /*
+      Colon format:
+      ctg:tv:name:1:1
+    */
+
+    const colon =
+      id.split(":");
+
+    if (
+      colon.length >= 5 &&
+      colon[0] === "ctg" &&
+      /^\d+$/.test(
+        colon[
+          colon.length - 2
+        ]
+      ) &&
+      /^\d+$/.test(
+        colon[
+          colon.length - 1
+        ]
+      )
+    ) {
+      season =
+        Number(
+          colon[
+            colon.length - 2
+          ]
+        );
+
+      episode =
+        Number(
+          colon[
+            colon.length - 1
+          ]
+        );
+
+      id =
+        colon
+          .slice(0, -2)
+          .join(":");
+    }
+  }
+
+  /*
+    Query parameters override
+    everything.
+  */
+
+  const queryId =
+    url.searchParams.get(
+      "id"
+    );
+
+  if (queryId) {
+    id =
+      cleanId(queryId);
+  }
+
+  const querySeason =
+    url.searchParams.get(
+      "season"
+    );
+
+  const queryEpisode =
+    url.searchParams.get(
+      "episode"
+    );
+
+  if (
+    querySeason !== null &&
+    /^\d+$/.test(
+      querySeason
+    )
+  ) {
+    season =
+      Number(querySeason);
+  }
+
+  if (
+    queryEpisode !== null &&
+    /^\d+$/.test(
+      queryEpisode
+    )
+  ) {
+    episode =
+      Number(queryEpisode);
+  }
+
+  return {
+    type,
+    id,
+    season,
+    episode
+  };
+}
+
+/* =========================
+   STREAM CONVERTER
+========================= */
+
+function makeStreams(links) {
+  if (
+    !Array.isArray(links)
+  ) {
+    return [];
+  }
+
+  return links
+    .filter(link =>
+      link &&
+      typeof link.url === "string" &&
+      link.url.length > 0
+    )
+    .map(link => {
+      const subtitles =
+        Array.isArray(
+          link.subs
+        )
+          ? link.subs
+              .filter(sub =>
+                sub &&
+                typeof sub.url === "string" &&
+                sub.url.length > 0
+              )
+              .map(sub => ({
+                url:
+                  sub.url,
+
+                lang:
+                  sub.label ||
+                  "Unknown",
+
+                label:
+                  sub.label ||
+                  "Subtitle"
+              }))
+          : [];
+
+      const stream = {
+        name:
+          "CTGMovies",
+
+        title:
+          `${link.quality || "Direct"}`
+          +
+          (
+            link.source
+              ? ` • ${link.source}`
+              : ""
+          ),
+
+        url:
+          link.url,
+
+        behaviorHints: {
+          bingeGroup:
+            "ctgmovies"
+        }
+      };
+
+      if (
+        subtitles.length > 0
+      ) {
+        stream.subtitles =
+          subtitles;
+      }
+
+      return stream;
+    });
+}
+
+/* =========================
+   STREAM HANDLER
+========================= */
+
+async function handleStream(
+  path,
+  url,
+  res
+) {
+  const request =
+    parseStreamRequest(
+      path,
+      url
+    );
+
+  if (!request.id) {
+    return sendJson(
+      res,
+      200,
+      {
+        streams: []
+      }
+    );
+  }
+
+  /*
+    Get metadata + episodes
+    from Cloudflare Worker.
+  */
+
+  const data =
+    await workerFetch(
+      `/stream?id=${encodeURIComponent(
+        request.id
+      )}`
+    );
+
+  let links = [];
+
+  /*
+    MOVIE
+  */
+
+  if (
+    request.type === "movie" ||
+    !Array.isArray(
+      data.episodes
+    )
+  ) {
+    if (
+      Array.isArray(
+        data.links
+      )
+    ) {
+      links =
+        data.links;
+    }
+  }
+
+  /*
+    SERIES / ANIME
+  */
+
+  else {
+    let selected =
+      null;
+
+    /*
+      Exact season + episode.
+    */
+
+    if (
+      request.season !== null &&
+      request.episode !== null
+    ) {
+      selected =
+        data.episodes.find(
+          ep =>
+            Number(ep.s) ===
+              Number(
+                request.season
+              ) &&
+            Number(ep.e) ===
+              Number(
+                request.episode
+              )
+        );
+    }
+
+    /*
+      Fallback:
+      episode only.
+    */
+
+    if (
+      !selected &&
+      request.episode !== null
+    ) {
+      selected =
+        data.episodes.find(
+          ep =>
+            Number(ep.e) ===
+            Number(
+              request.episode
+            )
+        );
+    }
+
+    if (
+      selected &&
+      Array.isArray(
+        selected.links
+      )
+    ) {
+      links =
+        selected.links;
+    }
+  }
+
+  return sendJson(
+    res,
+    200,
+    {
+      streams:
+        makeStreams(links)
+    }
+  );
+}
+
+/* =========================
+   MAIN HANDLER
+========================= */
+
+module.exports =
+  async function handler(
+    req,
+    res
+  ) {
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      "*"
+    );
+
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "*"
+    );
+
+    res.setHeader(
+      "Access-Control-Allow-Methods",
+      "GET,OPTIONS"
+    );
+
+    if (
+      req.method === "OPTIONS"
+    ) {
+      return res
+        .status(204)
+        .end();
+    }
+
+    try {
+      const url =
+        new URL(
+          req.url,
+          `https://${req.headers.host}`
+        );
+
+      const path =
+        url.pathname;
+
+      /* PING */
+
+      if (
+        path === "/ping"
+      ) {
+        return sendJson(
+          res,
+          200,
+          {
+            ok: true,
+            service:
+              "CTGMovies Vercel Bridge",
+            version:
+              "5.0.0",
+            worker:
+              WORKER
+          }
+        );
+      }
+
+      /* MANIFEST */
+
+      if (
+        path ===
+        "/manifest.json"
+      ) {
+        return sendJson(
+          res,
+          200,
+          makeManifest()
+        );
+      }
+
+      /* CATALOG */
+
+      if (
+        path.includes(
+          "/catalog/"
+        )
+      ) {
+        return handleCatalog(
+          path,
+          url,
+          res
+        );
+      }
+
+      /* META */
+
+      if (
+        path.includes(
+          "/meta/"
+        )
+      ) {
+        const parts =
+          path
+            .split("/")
+            .filter(Boolean);
+
+        const id =
+          cleanId(
+            parts[
+              parts.length - 1
+            ]
+          );
+
+        const type =
+          id.includes(":tv:") ||
+          id.includes(":anime:")
+            ? "series"
+            : "movie";
+
+        /*
+          IMPORTANT:
+          /stream endpoint gives
+          episodes as well, so use
+          it for series metadata.
+        */
+
+        const data =
+          await workerFetch(
+            `/stream?id=${encodeURIComponent(
+              id
+            )}`
+          );
+
+        return sendJson(
+          res,
+          200,
+          convertMeta(
+            data,
+            type,
+            id
+          )
+        );
+      }
+
+      /* STREAM */
+
+      if (
+        path === "/stream" ||
+        path.includes(
+          "/stream/"
+        )
+      ) {
+        return handleStream(
+          path,
+          url,
+          res
+        );
+      }
+
+      /* DIRECT MOVIES API */
+
+      if (
+        path === "/movies"
+      ) {
+        const data =
+          await workerFetch(
+            `/movies${url.search}`
+          );
+
+        return sendJson(
+          res,
+          200,
+          data
+        );
+      }
+
+      /* DIRECT SEARCH API */
+
+      if (
+        path === "/search"
+      ) {
+        const data =
+          await workerFetch(
+            `/search${url.search}`
+          );
+
+        return sendJson(
+          res,
+          200,
+          data
+        );
+      }
+
+      /* DIRECT META API */
+
+      if (
+        path === "/meta"
+      ) {
+        const id =
+          url.searchParams.get(
+            "id"
+          ) || "";
+
+        const data =
+          await workerFetch(
+            `/meta?id=${encodeURIComponent(
+              id
+            )}`
+          );
+
+        return sendJson(
+          res,
+          200,
+          data
+        );
+      }
+
+      return sendJson(
+        res,
+        404,
+        {
+          error:
+            "Not found",
+          path
+        }
+      );
+
+    } catch (error) {
+      console.error(error);
+
+      return sendJson(
+        res,
+        500,
+        {
+          streams: [],
+          error:
+            "Vercel bridge error",
+          message:
+            error.message
+        }
+      );
+    }
+  };
