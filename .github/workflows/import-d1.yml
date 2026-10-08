@@ -45,9 +45,7 @@ jobs:
             console.log("Catalog items:", items.length);
 
             if (!items.length) {
-              throw new Error(
-                "No catalog items found in data.json.gz"
-              );
+              throw new Error("No catalog items found");
             }
 
             function sqlValue(v) {
@@ -103,94 +101,70 @@ jobs:
                 );
               }
 
-              let result;
-
-              try {
-                result = JSON.parse(text);
-              } catch {
-                throw new Error(
-                  `Invalid Cloudflare API response: ${text}`
-                );
-              }
+              const result = JSON.parse(text);
 
               if (!result.success) {
                 throw new Error(
-                  JSON.stringify(
-                    result.errors || result
-                  )
+                  JSON.stringify(result.errors || result)
                 );
               }
 
               return result;
             }
 
-            const columns = [
-              "id",
-              "kind",
-              "slug",
-              "name",
-              "poster",
-              "backdrop",
-              "year",
-              "overview",
-              "rating",
-              "genres",
-              "runtime",
-              "imdb",
-              "tmdb",
-              "trailer",
-              "episodes",
-              "detail_url",
-              "links"
-            ];
+            let imported = 0;
 
-            // Small batch to avoid SQLITE_TOOBIG
-            const CHUNK = 5;
+            for (const item of items) {
 
-            for (
-              let i = 0;
-              i < items.length;
-              i += CHUNK
-            ) {
-              const batch =
-                items.slice(i, i + CHUNK);
-
-              const values = batch.map(item => {
-                const row = [
-                  item.id || null,
-                  item.kind || null,
-                  item.slug || null,
-                  item.name || null,
-                  item.poster || null,
-                  item.backdrop || null,
-                  item.year ?? null,
-                  item.overview || null,
-                  item.rating ?? null,
-                  item.genres ?? null,
-                  item.runtime ?? null,
-                  item.imdb || null,
-                  item.tmdb || null,
-                  item.trailer || null,
-                  item.episodes ?? null,
-                  item.detail_url ||
-                    (
-                      item.kind &&
-                      item.slug
-                        ? `https://ctgmovies.com/${item.kind}/${item.slug}`
-                        : null
-                    ),
-                  item.links ?? null
-                ];
-
-                return "(" +
-                  row.map(sqlValue).join(",") +
-                  ")";
-              }).join(",");
+              const row = [
+                item.id || null,
+                item.kind || null,
+                item.slug || null,
+                item.name || null,
+                item.poster || null,
+                item.backdrop || null,
+                item.year ?? null,
+                item.overview || null,
+                item.rating ?? null,
+                item.genres ?? null,
+                item.runtime ?? null,
+                item.imdb || null,
+                item.tmdb || null,
+                item.trailer || null,
+                item.episodes ?? null,
+                item.detail_url ||
+                  (
+                    item.kind && item.slug
+                      ? `https://ctgmovies.com/${item.kind}/${item.slug}`
+                      : null
+                  ),
+                item.links ?? null
+              ];
 
               const sql = `
                 INSERT INTO movies
-                (${columns.join(",")})
-                VALUES ${values}
+                (
+                  id,
+                  kind,
+                  slug,
+                  name,
+                  poster,
+                  backdrop,
+                  year,
+                  overview,
+                  rating,
+                  genres,
+                  runtime,
+                  imdb,
+                  tmdb,
+                  trailer,
+                  episodes,
+                  detail_url,
+                  links
+                )
+                VALUES (
+                  ${row.map(sqlValue).join(",")}
+                )
                 ON CONFLICT(id) DO UPDATE SET
                   kind=excluded.kind,
                   slug=excluded.slug,
@@ -211,14 +185,29 @@ jobs:
                   updated_at=CURRENT_TIMESTAMP
               `;
 
-              await query(sql);
+              try {
+                await query(sql);
+                imported++;
 
-              console.log(
-                `Imported ${Math.min(
-                  i + CHUNK,
-                  items.length
-                )} / ${items.length}`
-              );
+                if (
+                  imported % 25 === 0 ||
+                  imported === items.length
+                ) {
+                  console.log(
+                    `Imported ${imported} / ${items.length}`
+                  );
+                }
+
+              } catch (error) {
+                console.error(
+                  `FAILED ITEM ${imported + 1}:`,
+                  item.name || item.id
+                );
+
+                console.error(error.message);
+
+                throw error;
+              }
             }
 
             const check = await query(
@@ -228,21 +217,11 @@ jobs:
             const count =
               check.result?.[0]?.results?.[0]?.count;
 
-            console.log(
-              "D1 total rows:",
-              count
-            );
-
-            console.log(
-              "IMPORT COMPLETE"
-            );
+            console.log("D1 total rows:", count);
+            console.log("IMPORT COMPLETE");
 
           })().catch(error => {
-            console.error(
-              "IMPORT FAILED:",
-              error
-            );
-
+            console.error("IMPORT FAILED:", error);
             process.exit(1);
           });
           NODE
