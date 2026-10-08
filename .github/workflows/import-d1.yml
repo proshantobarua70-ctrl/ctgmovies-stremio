@@ -1,4 +1,4 @@
-]name: Import old catalog to D1
+name: Import old catalog to D1
 
 on:
   workflow_dispatch:
