@@ -227,8 +227,7 @@ async function handleCatalog(path, url, res) {
   if (Array.isArray(data.items)) {
     const metas = data.items.map(item => ({
       id: item.id,
-      type:
-        item.kind === "movie" ? "movie" : "series",
+      type: item.kind === "movie" ? "movie" : "series",
       name: item.name,
       poster: item.poster,
       background: item.backdrop,
@@ -269,7 +268,7 @@ function parseStreamRequest(pathname, url) {
   if (remaining.length > 0) {
     id = cleanId(remaining[0]);
 
-    // Supports /stream/series/ID/1/1.json
+    // /stream/series/ID/1/1.json
     if (remaining.length >= 3) {
       const s = cleanId(
         remaining[remaining.length - 2]
@@ -282,14 +281,13 @@ function parseStreamRequest(pathname, url) {
       if (/^\d+$/.test(s) && /^\d+$/.test(e)) {
         season = Number(s);
         episode = Number(e);
-
         id = cleanId(
           remaining[remaining.length - 3]
         );
       }
     }
 
-    // Supports episode IDs such as ctg:tv:name:1:1
+    // Episode ID: ctg:tv:name:1:1
     const colon = id.split(":");
 
     if (
@@ -304,7 +302,6 @@ function parseStreamRequest(pathname, url) {
     }
   }
 
-  // Query parameters override the parsed values.
   const queryId = url.searchParams.get("id");
 
   if (queryId) {
@@ -395,7 +392,6 @@ async function handleStream(path, url, res) {
 
   let links = [];
 
-  // Movies
   if (
     request.type === "movie" ||
     !Array.isArray(data.episodes)
@@ -404,7 +400,6 @@ async function handleStream(path, url, res) {
       links = data.links;
     }
   } else {
-    // Series and anime
     let selected = null;
 
     if (
@@ -417,7 +412,6 @@ async function handleStream(path, url, res) {
       );
     }
 
-    // Fallback to episode number if season is unavailable.
     if (!selected && request.episode !== null) {
       selected = data.episodes.find(ep =>
         Number(ep.e) === request.episode
@@ -457,6 +451,16 @@ module.exports = async function handler(req, res) {
     );
 
     const path = url.pathname;
+
+    // ROOT
+    if (path === "/") {
+      return sendJson(res, 200, {
+        ok: true,
+        service: "CTGMovies Vercel Bridge",
+        version: "5.0.0",
+        manifest: "/manifest.json"
+      });
+    }
 
     // PING
     if (path === "/ping") {
