@@ -1,1045 +1,1052 @@
 const WORKER =
-  "https://ctgmovies-api.proshantobarua70-4a5.workers.dev";
+"https://ctgmovies-api.proshantobarua70-4a5.workers.dev";
 
 const ADDON_ID = "com.mhthe1.ctgmovies.bridge";
 
 /* =========================
-   HELPERS
+HELPERS
 ========================= */
 
 function cleanId(value) {
-  return decodeURIComponent(String(value || ""))
-    .replace(/\.json$/i, "")
-    .trim();
+return decodeURIComponent(String(value || ""))
+.replace(/.json$/i, "")
+.trim();
 }
 
 function sendJson(res, status, data) {
-  res.status(status);
-  res.setHeader(
-    "Content-Type",
-    "application/json; charset=utf-8"
-  );
-  return res.json(data);
+res.status(status);
+res.setHeader(
+"Content-Type",
+"application/json; charset=utf-8"
+);
+return res.json(data);
 }
 
 async function workerFetch(path) {
-  const response = await fetch(`${WORKER}${path}`, {
-    headers: {
-      "User-Agent": "CTGMovies-Stremio-Bridge/5.0"
-    }
-  });
+const response = await fetch(${WORKER}${path}, {
+headers: {
+"User-Agent": "CTGMovies-Stremio-Bridge/5.0"
+}
+});
 
-  const text = await response.text();
+const text = await response.text();
 
-  let data;
+let data;
 
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(
-      `Worker returned invalid JSON: HTTP ${response.status}`
-    );
-  }
+try {
+data = JSON.parse(text);
+} catch {
+throw new Error(
+Worker returned invalid JSON: HTTP ${response.status}
+);
+}
 
-  if (!response.ok) {
-    throw new Error(
-      data.error ||
-      data.message ||
-      `Worker HTTP ${response.status}`
-    );
-  }
+if (!response.ok) {
+throw new Error(
+data.error ||
+data.message ||
+Worker HTTP ${response.status}
+);
+}
 
-  return data;
+return data;
 }
 
 /* =========================
-   MANIFEST
+MANIFEST
 ========================= */
 
 function makeManifest() {
-  return {
-    id: ADDON_ID,
-    version: "5.0.0",
+return {
+id: ADDON_ID,
+version: "5.0.0",
 
-    name: "CTGMovies Bridge",
+name: "CTGMovies Bridge",
 
-    description:
-      "CTGMovies Movies, TV Shows and Anime with direct streams.",
+description:
+  "CTGMovies Movies, TV Shows and Anime with direct streams.",
 
-    logo:
-      "https://dhakastremio.mehedihtanvir.me/icon.svg",
+logo:
+  "https://dhakastremio.mehedihtanvir.me/icon.svg",
 
-    background:
-      "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?q=80&w=1920&auto=format&fit=crop",
+background:
+  "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?q=80&w=1920&auto=format&fit=crop",
 
-    resources: [
-      "catalog",
+resources: [
+  "catalog",
 
-      {
-        name: "meta",
-        types: [
-          "movie",
-          "series"
-        ],
-        idPrefixes: [
-          "ctg:"
-        ]
-      },
-
-      {
-        name: "stream",
-        types: [
-          "movie",
-          "series"
-        ],
-        idPrefixes: [
-          "ctg:"
-        ]
-      }
-    ],
-
+  {
+    name: "meta",
     types: [
       "movie",
       "series"
     ],
+    idPrefixes: [
+      "ctg:"
+    ]
+  },
 
-    catalogs: [
-      {
-        type: "movie",
-        id: "ctg_movies",
-        name: "CTGMovies Movies",
-
-        extra: [
-          {
-            name: "search",
-            isRequired: false
-          },
-          {
-            name: "skip",
-            isRequired: false
-          }
-        ]
-      },
-
-      {
-        type: "series",
-        id: "ctg_tv",
-        name: "CTGMovies TV Shows",
-
-        extra: [
-          {
-            name: "search",
-            isRequired: false
-          },
-          {
-            name: "skip",
-            isRequired: false
-          }
-        ]
-      },
-
-      {
-        type: "series",
-        id: "ctg_anime",
-        name: "CTGMovies Anime",
-
-        extra: [
-          {
-            name: "search",
-            isRequired: false
-          },
-          {
-            name: "skip",
-            isRequired: false
-          }
-        ]
-      }
+  {
+    name: "stream",
+    types: [
+      "movie",
+      "series"
     ],
+    idPrefixes: [
+      "ctg:"
+    ]
+  }
+],
 
-    behaviorHints: {
-      configurable: false,
-      configurationRequired: false
-    }
-  };
+types: [
+  "movie",
+  "series"
+],
+
+catalogs: [
+  {
+    type: "movie",
+    id: "ctg_movies",
+    name: "CTGMovies Movies",
+
+    extra: [
+      {
+        name: "search",
+        isRequired: false
+      },
+      {
+        name: "skip",
+        isRequired: false
+      }
+    ]
+  },
+
+  {
+    type: "series",
+    id: "ctg_tv",
+    name: "CTGMovies TV Shows",
+
+    extra: [
+      {
+        name: "search",
+        isRequired: false
+      },
+      {
+        name: "skip",
+        isRequired: false
+      }
+    ]
+  },
+
+  {
+    type: "series",
+    id: "ctg_anime",
+    name: "CTGMovies Anime",
+
+    extra: [
+      {
+        name: "search",
+        isRequired: false
+      },
+      {
+        name: "skip",
+        isRequired: false
+      }
+    ]
+  }
+],
+
+behaviorHints: {
+  configurable: false,
+  configurationRequired: false
+}
+
+};
 }
 
 /* =========================
-   META
+META
 ========================= */
 
 function convertMeta(data, type, id) {
-  const actualId =
-    data.id || id;
+const actualId =
+data.id || id;
 
-  const actualType =
-    type ||
-    (
-      String(actualId).includes(":tv:") ||
-      String(actualId).includes(":anime:")
-        ? "series"
-        : "movie"
-    );
+const actualType =
+type ||
+(
+String(actualId).includes(":tv:") ||
+String(actualId).includes(":anime:")
+? "series"
+: "movie"
+);
 
-  const meta = {
-    id: actualId,
-    type: actualType,
-    name:
-      data.name ||
-      "CTGMovies"
-  };
+const meta = {
+id: actualId,
+type: actualType,
+name:
+data.name ||
+"CTGMovies"
+};
 
-  if (data.poster) {
-    meta.poster =
-      data.poster;
-  }
+if (data.poster) {
+meta.poster =
+data.poster;
+}
 
-  if (data.backdrop) {
-    meta.background =
-      data.backdrop;
-  }
+if (data.backdrop) {
+meta.background =
+data.backdrop;
+}
 
-  if (data.overview) {
-    meta.description =
-      data.overview;
-  }
+if (data.overview) {
+meta.description =
+data.overview;
+}
 
-  if (data.year) {
-    meta.releaseInfo =
-      String(data.year);
-  }
+if (data.year) {
+meta.releaseInfo =
+String(data.year);
+}
 
-  if (data.rating) {
-    meta.imdbRating =
-      data.rating;
-  }
+if (data.rating) {
+meta.imdbRating =
+data.rating;
+}
 
-  if (Array.isArray(data.genres)) {
-    meta.genres =
-      data.genres;
-  }
+if (Array.isArray(data.genres)) {
+meta.genres =
+data.genres;
+}
 
-  if (data.imdb) {
-    meta.imdb_id =
-      data.imdb;
-  }
+if (data.imdb) {
+meta.imdb_id =
+data.imdb;
+}
 
-  /*
-    IMPORTANT:
-    Series/Anime episodes
-    become Stremio videos.
-  */
+/*
+IMPORTANT:
+Series/Anime episodes
+become Stremio videos.
+*/
 
-  if (
-    actualType === "series" &&
-    Array.isArray(data.episodes)
-  ) {
-    meta.videos =
-      data.episodes
-        .filter(ep =>
-          ep &&
-          Number.isFinite(
-            Number(ep.s)
-          ) &&
-          Number.isFinite(
-            Number(ep.e)
-          )
-        )
-        .map(ep => {
-          const video = {
-            id:
-              `${actualId}:${Number(ep.s)}:${Number(ep.e)}`,
+if (
+actualType === "series" &&
+Array.isArray(data.episodes)
+) {
+meta.videos =
+data.episodes
+.filter(ep =>
+ep &&
+Number.isFinite(
+Number(ep.s)
+) &&
+Number.isFinite(
+Number(ep.e)
+)
+)
+.map(ep => {
+const video = {
+id:
+${actualId}:${Number(ep.s)}:${Number(ep.e)},
 
-            title:
-              ep.name ||
-              `Episode ${Number(ep.e)}`,
+        title:
+          ep.name ||
+          `Episode ${Number(ep.e)}`,
 
-            season:
-              Number(ep.s),
+        season:
+          Number(ep.s),
 
-            episode:
-              Number(ep.e)
-          };
+        episode:
+          Number(ep.e)
+      };
 
-          if (ep.overview) {
-            video.overview =
-              ep.overview;
-          }
+      if (ep.overview) {
+        video.overview =
+          ep.overview;
+      }
 
-          if (ep.still) {
-            video.thumbnail =
-              ep.still;
-          }
+      if (ep.still) {
+        video.thumbnail =
+          ep.still;
+      }
 
-          if (ep.air) {
-            video.released =
-              `${ep.air}T00:00:00.000Z`;
-          }
+      if (ep.air) {
+        video.released =
+          `${ep.air}T00:00:00.000Z`;
+      }
 
-          return video;
-        });
-  }
+      return video;
+    });
 
-  return {
-    meta
-  };
+}
+
+return {
+meta
+};
 }
 
 /* =========================
-   CATALOG
+CATALOG
 ========================= */
 
 async function handleCatalog(
-  path,
-  url,
-  res
+path,
+url,
+res
 ) {
-  const parts =
-    path
-      .split("/")
-      .filter(Boolean);
+const parts =
+path
+.split("/")
+.filter(Boolean);
 
-  const type =
-    parts[1] ||
-    "movie";
+const type =
+parts[1] ||
+"movie";
 
-  const catalog =
-    cleanId(
-      parts[2] || ""
-    );
+const catalog =
+cleanId(
+parts[2] || ""
+);
 
-  const skip =
-    Number(
-      url.searchParams.get(
-        "skip"
-      ) || "0"
-    );
+const skip =
+Number(
+url.searchParams.get(
+"skip"
+) || "0"
+);
 
-  const search =
-    url.searchParams.get(
-      "search"
-    ) || "";
+const search =
+url.searchParams.get(
+"search"
+) || "";
 
-  let target =
-    `/movies?type=${encodeURIComponent(type)}` +
-    `&catalog=${encodeURIComponent(catalog)}` +
-    `&skip=${encodeURIComponent(skip)}`;
+let target =
+/movies?type=${encodeURIComponent(type)} +
+&catalog=${encodeURIComponent(catalog)} +
+&skip=${encodeURIComponent(skip)};
 
-  if (search) {
-    target +=
-      `&search=${encodeURIComponent(search)}`;
+if (search) {
+target +=
+&search=${encodeURIComponent(search)};
+}
+
+const data =
+await workerFetch(target);
+
+/*
+Worker already returned
+Stremio metas.
+*/
+
+if (
+Array.isArray(
+data.metas
+)
+) {
+return sendJson(
+res,
+200,
+{
+metas:
+data.metas
+}
+);
+}
+
+/*
+Fallback for Worker items.
+*/
+
+if (
+Array.isArray(
+data.items
+)
+) {
+const metas =
+data.items.map(item => ({
+id:
+item.id,
+
+    type:
+      item.kind === "movie"
+        ? "movie"
+        : "series",
+
+    name:
+      item.name,
+
+    poster:
+      item.poster,
+
+    background:
+      item.backdrop,
+
+    description:
+      item.overview,
+
+    releaseInfo:
+      item.year
+        ? String(item.year)
+        : undefined
+  }));
+
+return sendJson(
+  res,
+  200,
+  {
+    metas
   }
+);
 
-  const data =
-    await workerFetch(target);
+}
 
-  /*
-    Worker already returned
-    Stremio metas.
-  */
-
-  if (
-    Array.isArray(
-      data.metas
-    )
-  ) {
-    return sendJson(
-      res,
-      200,
-      {
-        metas:
-          data.metas
-      }
-    );
-  }
-
-  /*
-    Fallback for Worker items.
-  */
-
-  if (
-    Array.isArray(
-      data.items
-    )
-  ) {
-    const metas =
-      data.items.map(item => ({
-        id:
-          item.id,
-
-        type:
-          item.kind === "movie"
-            ? "movie"
-            : "series",
-
-        name:
-          item.name,
-
-        poster:
-          item.poster,
-
-        background:
-          item.backdrop,
-
-        description:
-          item.overview,
-
-        releaseInfo:
-          item.year
-            ? String(item.year)
-            : undefined
-      }));
-
-    return sendJson(
-      res,
-      200,
-      {
-        metas
-      }
-    );
-  }
-
-  return sendJson(
-    res,
-    200,
-    {
-      metas: []
-    }
-  );
+return sendJson(
+res,
+200,
+{
+metas: []
+}
+);
 }
 
 /* =========================
-   STREAM ID PARSER
+STREAM ID PARSER
 ========================= */
 
 function parseStreamRequest(
-  pathname,
-  url
+pathname,
+url
 ) {
-  const parts =
-    pathname
-      .split("/")
-      .filter(Boolean);
+const parts =
+pathname
+.split("/")
+.filter(Boolean);
 
-  let type = "";
-  let id = "";
-  let season = null;
-  let episode = null;
+let type = "";
+let id = "";
+let season = null;
+let episode = null;
 
-  const streamIndex =
-    parts.indexOf(
-      "stream"
+const streamIndex =
+parts.indexOf(
+"stream"
+);
+
+if (
+streamIndex === -1
+) {
+return {
+type,
+id,
+season,
+episode
+};
+}
+
+type =
+parts[
+streamIndex + 1
+] || "";
+
+const remaining =
+parts.slice(
+streamIndex + 2
+);
+
+if (
+remaining.length > 0
+) {
+/*
+Standard:
+/stream/series/ID.json
+*/
+
+id =
+  cleanId(
+    remaining[0]
+  );
+
+/*
+  Path:
+  /stream/series/ID/1/1.json
+*/
+
+if (
+  remaining.length >= 3
+) {
+  const s =
+    cleanId(
+      remaining[
+        remaining.length - 2
+      ]
+    );
+
+  const e =
+    cleanId(
+      remaining[
+        remaining.length - 1
+      ]
     );
 
   if (
-    streamIndex === -1
+    /^\d+$/.test(s) &&
+    /^\d+$/.test(e)
   ) {
-    return {
-      type,
-      id,
-      season,
-      episode
-    };
-  }
+    season =
+      Number(s);
 
-  type =
-    parts[
-      streamIndex + 1
-    ] || "";
-
-  const remaining =
-    parts.slice(
-      streamIndex + 2
-    );
-
-  if (
-    remaining.length > 0
-  ) {
-    /*
-      Standard:
-      /stream/series/ID.json
-    */
+    episode =
+      Number(e);
 
     id =
       cleanId(
-        remaining[0]
+        remaining[
+          remaining.length - 3
+        ]
       );
-
-    /*
-      Path:
-      /stream/series/ID/1/1.json
-    */
-
-    if (
-      remaining.length >= 3
-    ) {
-      const s =
-        cleanId(
-          remaining[
-            remaining.length - 2
-          ]
-        );
-
-      const e =
-        cleanId(
-          remaining[
-            remaining.length - 1
-          ]
-        );
-
-      if (
-        /^\d+$/.test(s) &&
-        /^\d+$/.test(e)
-      ) {
-        season =
-          Number(s);
-
-        episode =
-          Number(e);
-
-        id =
-          cleanId(
-            remaining[
-              remaining.length - 3
-            ]
-          );
-      }
-    }
-
-    /*
-      Colon format:
-      ctg:tv:name:1:1
-    */
-
-    const colon =
-      id.split(":");
-
-    if (
-      colon.length >= 5 &&
-      colon[0] === "ctg" &&
-      /^\d+$/.test(
-        colon[
-          colon.length - 2
-        ]
-      ) &&
-      /^\d+$/.test(
-        colon[
-          colon.length - 1
-        ]
-      )
-    ) {
-      season =
-        Number(
-          colon[
-            colon.length - 2
-          ]
-        );
-
-      episode =
-        Number(
-          colon[
-            colon.length - 1
-          ]
-        );
-
-      id =
-        colon
-          .slice(0, -2)
-          .join(":");
-    }
   }
+}
 
-  /*
-    Query parameters override
-    everything.
-  */
+/*
+  Colon format:
+  ctg:tv:name:1:1
+*/
 
-  const queryId =
-    url.searchParams.get(
-      "id"
+const colon =
+  id.split(":");
+
+if (
+  colon.length >= 5 &&
+  colon[0] === "ctg" &&
+  /^\d+$/.test(
+    colon[
+      colon.length - 2
+    ]
+  ) &&
+  /^\d+$/.test(
+    colon[
+      colon.length - 1
+    ]
+  )
+) {
+  season =
+    Number(
+      colon[
+        colon.length - 2
+      ]
     );
 
-  if (queryId) {
-    id =
-      cleanId(queryId);
-  }
-
-  const querySeason =
-    url.searchParams.get(
-      "season"
+  episode =
+    Number(
+      colon[
+        colon.length - 1
+      ]
     );
 
-  const queryEpisode =
-    url.searchParams.get(
-      "episode"
-    );
+  id =
+    colon
+      .slice(0, -2)
+      .join(":");
+}
 
-  if (
-    querySeason !== null &&
-    /^\d+$/.test(
-      querySeason
-    )
-  ) {
-    season =
-      Number(querySeason);
-  }
+}
 
-  if (
-    queryEpisode !== null &&
-    /^\d+$/.test(
-      queryEpisode
-    )
-  ) {
-    episode =
-      Number(queryEpisode);
-  }
+/*
+Query parameters override
+everything.
+*/
 
-  return {
-    type,
-    id,
-    season,
-    episode
-  };
+const queryId =
+url.searchParams.get(
+"id"
+);
+
+if (queryId) {
+id =
+cleanId(queryId);
+}
+
+const querySeason =
+url.searchParams.get(
+"season"
+);
+
+const queryEpisode =
+url.searchParams.get(
+"episode"
+);
+
+if (
+querySeason !== null &&
+/^\d+$/.test(
+querySeason
+)
+) {
+season =
+Number(querySeason);
+}
+
+if (
+queryEpisode !== null &&
+/^\d+$/.test(
+queryEpisode
+)
+) {
+episode =
+Number(queryEpisode);
+}
+
+return {
+type,
+id,
+season,
+episode
+};
 }
 
 /* =========================
-   STREAM CONVERTER
+STREAM CONVERTER
 ========================= */
 
 function makeStreams(links) {
+if (
+!Array.isArray(links)
+) {
+return [];
+}
+
+return links
+.filter(link =>
+link &&
+typeof link.url === "string" &&
+link.url.length > 0
+)
+.map(link => {
+const subtitles =
+Array.isArray(
+link.subs
+)
+? link.subs
+.filter(sub =>
+sub &&
+typeof sub.url === "string" &&
+sub.url.length > 0
+)
+.map(sub => ({
+url:
+sub.url,
+
+            lang:
+              sub.label ||
+              "Unknown",
+
+            label:
+              sub.label ||
+              "Subtitle"
+          }))
+      : [];
+
+  const stream = {
+    name:
+      "CTGMovies",
+
+    title:
+      `${link.quality || "Direct"}`
+      +
+      (
+        link.source
+          ? ` • ${link.source}`
+          : ""
+      ),
+
+    url:
+      link.url,
+
+    behaviorHints: {
+      bingeGroup:
+        "ctgmovies"
+    }
+  };
+
   if (
-    !Array.isArray(links)
+    subtitles.length > 0
   ) {
-    return [];
+    stream.subtitles =
+      subtitles;
   }
 
-  return links
-    .filter(link =>
-      link &&
-      typeof link.url === "string" &&
-      link.url.length > 0
-    )
-    .map(link => {
-      const subtitles =
-        Array.isArray(
-          link.subs
-        )
-          ? link.subs
-              .filter(sub =>
-                sub &&
-                typeof sub.url === "string" &&
-                sub.url.length > 0
-              )
-              .map(sub => ({
-                url:
-                  sub.url,
+  return stream;
+});
 
-                lang:
-                  sub.label ||
-                  "Unknown",
-
-                label:
-                  sub.label ||
-                  "Subtitle"
-              }))
-          : [];
-
-      const stream = {
-        name:
-          "CTGMovies",
-
-        title:
-          `${link.quality || "Direct"}`
-          +
-          (
-            link.source
-              ? ` • ${link.source}`
-              : ""
-          ),
-
-        url:
-          link.url,
-
-        behaviorHints: {
-          bingeGroup:
-            "ctgmovies"
-        }
-      };
-
-      if (
-        subtitles.length > 0
-      ) {
-        stream.subtitles =
-          subtitles;
-      }
-
-      return stream;
-    });
 }
 
 /* =========================
-   STREAM HANDLER
+STREAM HANDLER
 ========================= */
 
 async function handleStream(
-  path,
-  url,
-  res
+path,
+url,
+res
 ) {
-  const request =
-    parseStreamRequest(
-      path,
-      url
+const request =
+parseStreamRequest(
+path,
+url
+);
+
+if (!request.id) {
+return sendJson(
+res,
+200,
+{
+streams: []
+}
+);
+}
+
+/*
+Get metadata + episodes
+from Cloudflare Worker.
+*/
+
+const data =
+await workerFetch(
+/stream?id=${encodeURIComponent(
+        request.id
+      )}
+);
+
+let links = [];
+
+/*
+MOVIE
+*/
+
+if (
+request.type === "movie" ||
+!Array.isArray(
+data.episodes
+)
+) {
+if (
+Array.isArray(
+data.links
+)
+) {
+links =
+data.links;
+}
+}
+
+/*
+SERIES / ANIME
+*/
+
+else {
+let selected =
+null;
+
+/*
+  Exact season + episode.
+*/
+
+if (
+  request.season !== null &&
+  request.episode !== null
+) {
+  selected =
+    data.episodes.find(
+      ep =>
+        Number(ep.s) ===
+          Number(
+            request.season
+          ) &&
+        Number(ep.e) ===
+          Number(
+            request.episode
+          )
+    );
+}
+
+/*
+  Fallback:
+  episode only.
+*/
+
+if (
+  !selected &&
+  request.episode !== null
+) {
+  selected =
+    data.episodes.find(
+      ep =>
+        Number(ep.e) ===
+        Number(
+          request.episode
+        )
+    );
+}
+
+if (
+  selected &&
+  Array.isArray(
+    selected.links
+  )
+) {
+  links =
+    selected.links;
+}
+
+}
+
+return sendJson(
+res,
+200,
+{
+streams:
+makeStreams(links)
+}
+);
+}
+
+/* =========================
+MAIN HANDLER
+========================= */
+
+module.exports =
+async function handler(
+req,
+res
+) {
+res.setHeader(
+"Access-Control-Allow-Origin",
+"*"
+);
+
+res.setHeader(
+  "Access-Control-Allow-Headers",
+  "*"
+);
+
+res.setHeader(
+  "Access-Control-Allow-Methods",
+  "GET,OPTIONS"
+);
+
+if (
+  req.method === "OPTIONS"
+) {
+  return res
+    .status(204)
+    .end();
+}
+
+try {
+  const url =
+    new URL(
+      req.url,
+      `https://${req.headers.host}`
     );
 
-  if (!request.id) {
+  const path =
+    url.pathname;
+
+  /* PING */
+
+  if (
+    path === "/ping"
+  ) {
     return sendJson(
       res,
       200,
       {
-        streams: []
+        ok: true,
+        service:
+          "CTGMovies Vercel Bridge",
+        version:
+          "5.0.0",
+        worker:
+          WORKER
       }
     );
   }
 
-  /*
-    Get metadata + episodes
-    from Cloudflare Worker.
-  */
-
-  const data =
-    await workerFetch(
-      `/stream?id=${encodeURIComponent(
-        request.id
-      )}`
-    );
-
-  let links = [];
-
-  /*
-    MOVIE
-  */
+  /* MANIFEST */
 
   if (
-    request.type === "movie" ||
-    !Array.isArray(
-      data.episodes
-    )
+    path ===
+    "/manifest.json"
   ) {
-    if (
-      Array.isArray(
-        data.links
-      )
-    ) {
-      links =
-        data.links;
-    }
+    return sendJson(
+      res,
+      200,
+      makeManifest()
+    );
   }
 
-  /*
-    SERIES / ANIME
-  */
+  /* CATALOG */
 
-  else {
-    let selected =
-      null;
+  if (
+    path.includes(
+      "/catalog/"
+    )
+  ) {
+    return handleCatalog(
+      path,
+      url,
+      res
+    );
+  }
+
+  /* META */
+
+  if (
+    path.includes(
+      "/meta/"
+    )
+  ) {
+    const parts =
+      path
+        .split("/")
+        .filter(Boolean);
+
+    const id =
+      cleanId(
+        parts[
+          parts.length - 1
+        ]
+      );
+
+    const type =
+      id.includes(":tv:") ||
+      id.includes(":anime:")
+        ? "series"
+        : "movie";
 
     /*
-      Exact season + episode.
+      IMPORTANT:
+      /stream endpoint gives
+      episodes as well, so use
+      it for series metadata.
     */
 
-    if (
-      request.season !== null &&
-      request.episode !== null
-    ) {
-      selected =
-        data.episodes.find(
-          ep =>
-            Number(ep.s) ===
-              Number(
-                request.season
-              ) &&
-            Number(ep.e) ===
-              Number(
-                request.episode
-              )
-        );
-    }
+    const data =
+      await workerFetch(
+        `/stream?id=${encodeURIComponent(
+          id
+        )}`
+      );
 
-    /*
-      Fallback:
-      episode only.
-    */
-
-    if (
-      !selected &&
-      request.episode !== null
-    ) {
-      selected =
-        data.episodes.find(
-          ep =>
-            Number(ep.e) ===
-            Number(
-              request.episode
-            )
-        );
-    }
-
-    if (
-      selected &&
-      Array.isArray(
-        selected.links
+    return sendJson(
+      res,
+      200,
+      convertMeta(
+        data,
+        type,
+        id
       )
-    ) {
-      links =
-        selected.links;
-    }
+    );
+  }
+
+  /* STREAM */
+
+  if (
+    path === "/stream" ||
+    path.includes(
+      "/stream/"
+    )
+  ) {
+    return handleStream(
+      path,
+      url,
+      res
+    );
+  }
+
+  /* DIRECT MOVIES API */
+
+  if (
+    path === "/movies"
+  ) {
+    const data =
+      await workerFetch(
+        `/movies${url.search}`
+      );
+
+    return sendJson(
+      res,
+      200,
+      data
+    );
+  }
+
+  /* DIRECT SEARCH API */
+
+  if (
+    path === "/search"
+  ) {
+    const data =
+      await workerFetch(
+        `/search${url.search}`
+      );
+
+    return sendJson(
+      res,
+      200,
+      data
+    );
+  }
+
+  /* DIRECT META API */
+
+  if (
+    path === "/meta"
+  ) {
+    const id =
+      url.searchParams.get(
+        "id"
+      ) || "";
+
+    const data =
+      await workerFetch(
+        `/meta?id=${encodeURIComponent(
+          id
+        )}`
+      );
+
+    return sendJson(
+      res,
+      200,
+      data
+    );
   }
 
   return sendJson(
     res,
-    200,
+    404,
     {
-      streams:
-        makeStreams(links)
+      error:
+        "Not found",
+      path
+    }
+  );
+
+} catch (error) {
+  console.error(error);
+
+  return sendJson(
+    res,
+    500,
+    {
+      streams: [],
+      error:
+        "Vercel bridge error",
+      message:
+        error.message
     }
   );
 }
 
-/* =========================
-   MAIN HANDLER
-========================= */
-
-module.exports =
-  async function handler(
-    req,
-    res
-  ) {
-    res.setHeader(
-      "Access-Control-Allow-Origin",
-      "*"
-    );
-
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "*"
-    );
-
-    res.setHeader(
-      "Access-Control-Allow-Methods",
-      "GET,OPTIONS"
-    );
-
-    if (
-      req.method === "OPTIONS"
-    ) {
-      return res
-        .status(204)
-        .end();
-    }
-
-    try {
-      const url =
-        new URL(
-          req.url,
-          `https://${req.headers.host}`
-        );
-
-      const path =
-        url.pathname;
-
-      /* PING */
-
-      if (
-        path === "/ping"
-      ) {
-        return sendJson(
-          res,
-          200,
-          {
-            ok: true,
-            service:
-              "CTGMovies Vercel Bridge",
-            version:
-              "5.0.0",
-            worker:
-              WORKER
-          }
-        );
-      }
-
-      /* MANIFEST */
-
-      if (
-        path ===
-        "/manifest.json"
-      ) {
-        return sendJson(
-          res,
-          200,
-          makeManifest()
-        );
-      }
-
-      /* CATALOG */
-
-      if (
-        path.includes(
-          "/catalog/"
-        )
-      ) {
-        return handleCatalog(
-          path,
-          url,
-          res
-        );
-      }
-
-      /* META */
-
-      if (
-        path.includes(
-          "/meta/"
-        )
-      ) {
-        const parts =
-          path
-            .split("/")
-            .filter(Boolean);
-
-        const id =
-          cleanId(
-            parts[
-              parts.length - 1
-            ]
-          );
-
-        const type =
-          id.includes(":tv:") ||
-          id.includes(":anime:")
-            ? "series"
-            : "movie";
-
-        /*
-          IMPORTANT:
-          /stream endpoint gives
-          episodes as well, so use
-          it for series metadata.
-        */
-
-        const data =
-          await workerFetch(
-            `/stream?id=${encodeURIComponent(
-              id
-            )}`
-          );
-
-        return sendJson(
-          res,
-          200,
-          convertMeta(
-            data,
-            type,
-            id
-          )
-        );
-      }
-
-      /* STREAM */
-
-      if (
-        path === "/stream" ||
-        path.includes(
-          "/stream/"
-        )
-      ) {
-        return handleStream(
-          path,
-          url,
-          res
-        );
-      }
-
-      /* DIRECT MOVIES API */
-
-      if (
-        path === "/movies"
-      ) {
-        const data =
-          await workerFetch(
-            `/movies${url.search}`
-          );
-
-        return sendJson(
-          res,
-          200,
-          data
-        );
-      }
-
-      /* DIRECT SEARCH API */
-
-      if (
-        path === "/search"
-      ) {
-        const data =
-          await workerFetch(
-            `/search${url.search}`
-          );
-
-        return sendJson(
-          res,
-          200,
-          data
-        );
-      }
-
-      /* DIRECT META API */
-
-      if (
-        path === "/meta"
-      ) {
-        const id =
-          url.searchParams.get(
-            "id"
-          ) || "";
-
-        const data =
-          await workerFetch(
-            `/meta?id=${encodeURIComponent(
-              id
-            )}`
-          );
-
-        return sendJson(
-          res,
-          200,
-          data
-        );
-      }
-
-      return sendJson(
-        res,
-        404,
-        {
-          error:
-            "Not found",
-          path
-        }
-      );
-
-    } catch (error) {
-      console.error(error);
-
-      return sendJson(
-        res,
-        500,
-        {
-          streams: [],
-          error:
-            "Vercel bridge error",
-          message:
-            error.message
-        }
-      );
-    }
-  };
+};
